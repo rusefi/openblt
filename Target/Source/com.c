@@ -50,9 +50,6 @@
 ****************************************************************************************/
 /** \brief Holds the communication interface of the currently active interface. */
 static tComInterfaceId comActiveInterface = COM_IF_OTHER;
-#ifdef BOOT_COM_RS232_CHANNELS_N
-static blt_int8s Rs232ActiveInterface = -1;
-#endif
 
 
 /************************************************************************************//**
@@ -130,16 +127,6 @@ void ComTask(void)
 #endif
 #if (BOOT_COM_RS232_ENABLE > 0)
 #ifdef BOOT_COM_RS232_CHANNELS_N
-  if (Rs232ActiveInterface != -1) {
-    if (Rs232ReceivePacket(&xcpCtoReqPacket[0], &xcpPacketLen) == BLT_TRUE)
-    {
-      /* make this the active interface */
-      comActiveInterface = COM_IF_RS232;
-      /* process packet */
-      XcpPacketReceived(&xcpCtoReqPacket[0], xcpPacketLen);
-    }
-  }
-  else
   {
     blt_int8u i;
     for (i = 0; i < BOOT_COM_RS232_CHANNELS_N; i++)
@@ -149,7 +136,6 @@ void ComTask(void)
       {
         /* make this the active interface */
         comActiveInterface = COM_IF_RS232;
-        Rs232ActiveInterface = i;
         /* process packet */
         XcpPacketReceived(&xcpCtoReqPacket[0], xcpPacketLen);
         break;
