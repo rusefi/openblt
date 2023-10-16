@@ -32,6 +32,9 @@
 /****************************************************************************************
 * Function prototypes
 ****************************************************************************************/
+#ifdef BOOT_COM_RS232_CHANNELS_N
+blt_bool Rs232Switch(blt_int8u channel);
+#endif
 void     Rs232Init(void);
 void     Rs232TransmitPacket(blt_int8u *data, blt_int8u len);
 blt_bool Rs232ReceivePacket(blt_int8u *data, blt_int8u *len);
