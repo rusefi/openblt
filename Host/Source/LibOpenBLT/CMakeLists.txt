@@ -203,7 +203,7 @@ if(BUILD_SHARED)
   elseif(WIN32)
     # Link the Winsock library
     target_link_libraries(openblt_shared ws2_32 winusb setupapi)
-  endif(APPLE)  
+  endif(APPLE)
   if(CMAKE_C_COMPILER_ID MATCHES MSVC)
     # Microsoft Visual Studio does not add "lib" to the name of the DLL, whereas GCC
     # (including MinGW) does. Correct this here.
