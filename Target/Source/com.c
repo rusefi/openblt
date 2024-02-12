@@ -69,8 +69,21 @@ void ComInit(void)
   comActiveInterface = COM_IF_CAN;
 #endif
 #if (BOOT_COM_RS232_ENABLE > 0)
-  /* initialize the RS232 interface */
+  /* initialize the RS232 interface(s) */
+#ifdef BOOT_COM_RS232_CHANNELS_N
+  {
+    blt_int8u i;
+    for (i = 0; i < BOOT_COM_RS232_CHANNELS_N; i++)
+    {
+      if (Rs232Switch(i) == BLT_TRUE)
+      {
+        Rs232Init();
+      }
+    }
+  }
+#else
   Rs232Init();
+#endif
   /* set it as active */
   comActiveInterface = COM_IF_RS232;
 #endif
@@ -113,6 +126,23 @@ void ComTask(void)
   }
 #endif
 #if (BOOT_COM_RS232_ENABLE > 0)
+#ifdef BOOT_COM_RS232_CHANNELS_N
+  {
+    blt_int8u i;
+    for (i = 0; i < BOOT_COM_RS232_CHANNELS_N; i++)
+    {
+      if ((Rs232Switch(i) == BLT_TRUE) &&
+          (Rs232ReceivePacket(&xcpCtoReqPacket[0], &xcpPacketLen) == BLT_TRUE))
+      {
+        /* make this the active interface */
+        comActiveInterface = COM_IF_RS232;
+        /* process packet */
+        XcpPacketReceived(&xcpCtoReqPacket[0], xcpPacketLen);
+        break;
+      }
+    }
+  }
+#else
   if (Rs232ReceivePacket(&xcpCtoReqPacket[0], &xcpPacketLen) == BLT_TRUE)
   {
     /* make this the active interface */
@@ -120,6 +150,7 @@ void ComTask(void)
     /* process packet */
     XcpPacketReceived(&xcpCtoReqPacket[0], xcpPacketLen);
   }
+#endif
 #endif
 #if (BOOT_COM_USB_ENABLE > 0)
   if (UsbReceivePacket(&xcpCtoReqPacket[0], &xcpPacketLen) == BLT_TRUE)

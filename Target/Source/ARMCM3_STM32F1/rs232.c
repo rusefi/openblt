@@ -44,6 +44,8 @@
 #define RS232_CTO_RX_PACKET_TIMEOUT_MS (200u)
 /** \brief Timeout for transmitting a byte in milliseconds. */
 #define RS232_BYTE_TX_TIMEOUT_MS       (10u)
+
+#ifndef BOOT_COM_RS232_CHANNELS_N
 /* map the configured UART channel index to the STM32's USART peripheral */
 #if (BOOT_COM_RS232_CHANNEL_INDEX == 0)
 /** \brief Set UART base address to USART1. */
@@ -55,7 +57,13 @@
 /** \brief Set UART base address to USART3. */
 #define USART_CHANNEL   USART3
 #endif
+#endif
 
+#ifdef BOOT_COM_RS232_CHANNELS_N
+/* const */ USART_TypeDef *Rs232ChannelDevs[BOOT_COM_RS232_CHANNELS_N] = BOOT_COM_RS232_CHANNEL_DEVS;
+
+USART_TypeDef *USART_CHANNEL =  BOOT_COM_RS232_CHANNEL_DEFAULT_DEV; //(USART_TypeDef *)Rs232ChannelDevs[0];
+#endif
 
 /****************************************************************************************
 * Function prototypes
@@ -63,6 +71,19 @@
 static blt_bool Rs232ReceiveByte(blt_int8u *data);
 static void     Rs232TransmitByte(blt_int8u data);
 
+#ifdef BOOT_COM_RS232_CHANNELS_N
+blt_bool Rs232Switch(blt_int8u channel)
+{
+  if (channel >= BOOT_COM_RS232_CHANNELS_N)
+  {
+    return BLT_FALSE;
+  }
+
+  USART_CHANNEL = Rs232ChannelDevs[channel];
+
+  return BLT_TRUE;
+}
+#endif
 
 /************************************************************************************//**
 ** \brief     Initializes the RS232 communication interface.
@@ -73,12 +94,14 @@ void Rs232Init(void)
 {
   LL_USART_InitTypeDef USART_InitStruct;
 
+#ifndef BOOT_COM_RS232_CHANNELS_N
   /* the current implementation supports USART1 - USART5. throw an assertion error in
    * case a different UART channel is configured.
    */
   ASSERT_CT((BOOT_COM_RS232_CHANNEL_INDEX == 0) ||
             (BOOT_COM_RS232_CHANNEL_INDEX == 1) ||
             (BOOT_COM_RS232_CHANNEL_INDEX == 2));
+#endif
 
   /* disable the UART peripheral */
   LL_USART_Disable(USART_CHANNEL);
