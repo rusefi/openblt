@@ -195,12 +195,14 @@
 #error "BOOT_COM_RS232_RX_MAX_DATA must be <= 255"
 #endif
 
+#ifndef BOOT_COM_RS232_CHANNELS_N
 #ifndef BOOT_COM_RS232_CHANNEL_INDEX
 #error "BOOT_COM_RS232_CHANNEL_INDEX is missing in blt_conf.h"
 #endif
 
 #if (BOOT_COM_RS232_CHANNEL_INDEX < 0)
 #error "BOOT_COM_RS232_CHANNEL_INDEX must be >= 0"
+#endif
 #endif
 
 #endif /* BOOT_COM_RS232_ENABLE > 0 */
