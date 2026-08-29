@@ -207,6 +207,15 @@
 #define XCP_CMD_PROGRAM_PREPARE     (0xcc)
 /** \brief PROGRAM_MAX command code. */
 #define XCP_CMD_PROGRAM_MAX         (0xc9)
+/** \brief rusEFI extension: deferred-ACK batch programming. The frame carries
+ *           the batch length in data[4..7] (LE); the following PROGRAM_MAX
+ *           frames fill the batch buffer without per-frame responses and a
+ *           single response is sent when the batch completes. */
+#define XCP_CMD_PROGRAM_BATCH       (0xc8)
+/** \brief rusEFI extension: switch the CAN baudrate. data[1] = 0 for 500 kbit/s,
+ *           1 for 1 Mbit/s. The response is sent at the OLD speed; the switch
+ *           happens afterwards, so the master must also switch its adapter. */
+#define XCP_CMD_SET_CAN_BAUDRATE    (0xc7)
 
 /* xcp supported resources */
 /** \brief ProGraMming resource. */

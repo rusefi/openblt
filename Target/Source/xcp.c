@@ -99,6 +99,8 @@ static void XcpCmdProgramStart(blt_int8u *data);
 static void XcpCmdProgramClear(blt_int8u *data);
 static void XcpCmdProgramReset(blt_int8u *data);
 static void XcpCmdProgramPrepare(blt_int8u *data);
+static void XcpCmdProgramBatch(blt_int8u *data);
+static void XcpCmdSetCanBaudrate(blt_int8u *data);
 #endif
 
 
@@ -145,6 +147,23 @@ static const blt_int8s xcpStationId[] = XCP_STATION_ID_STRING;
 ****************************************************************************************/
 /** \brief Local variable for storing XCP internal module info. */
 static tXcpInfo xcpInfo;
+
+#if (XCP_RES_PROGRAMMING_EN == 1)
+/** \brief rusEFI extension: request a CAN baudrate change (rate: 0 = 500k, 1 = 1M).
+ *         Implemented by the board transport (openblt_can.cpp); the actual switch
+ *         happens after the response left the wire. */
+extern void XcpSetCanBaudrateHook(blt_int8u rate);
+
+/** \brief rusEFI extension: deferred-ACK batch programming state. PROGRAM_MAX
+ *         frames accumulate in xcpBatchBuffer without per-frame responses; one
+ *         NvmWrite + one response happen when the batch length is reached. */
+#define XCP_BATCH_BUFFER_SIZE (2048u)
+static blt_int8u xcpBatchBuffer[XCP_BATCH_BUFFER_SIZE];
+static blt_int32u xcpBatchLen = 0;
+static blt_int32u xcpBatchOffset = 0;
+static blt_addr xcpBatchAddr = 0;
+static blt_bool xcpBatchActive = BLT_FALSE;
+#endif
 
 
 /************************************************************************************//**
@@ -277,6 +296,12 @@ void XcpPacketReceived(blt_int8u *data, blt_int8u len)
         break;
       case XCP_CMD_PROGRAM_PREPARE:
         XcpCmdProgramPrepare(data);
+        break;
+      case XCP_CMD_PROGRAM_BATCH:
+        XcpCmdProgramBatch(data);
+        break;
+      case XCP_CMD_SET_CAN_BAUDRATE:
+        XcpCmdSetCanBaudrate(data);
         break;
 #endif
 #if (XCP_SEED_KEY_PROTECTION_EN == 1)
@@ -1319,6 +1344,48 @@ static void XcpCmdProgramMax(blt_int8u *data)
   }
 #endif
 
+  if (xcpBatchActive == BLT_TRUE)
+  {
+    /* deferred-ACK batch mode: buffer the payload, program the whole batch
+     * in one NvmWrite when the declared length is reached */
+    blt_int32u chunk = XCP_CTO_PACKET_LEN-1;
+    if (chunk > (xcpBatchLen - xcpBatchOffset))
+    {
+      chunk = xcpBatchLen - xcpBatchOffset;
+    }
+    for (blt_int32u i = 0; i < chunk; i++)
+    {
+      xcpBatchBuffer[xcpBatchOffset + i] = data[1+i];
+    }
+    xcpBatchOffset += chunk;
+
+    /* keep the mta in sync with the frames that arrived */
+    xcpInfo.mta += XCP_CTO_PACKET_LEN-1;
+
+    if (xcpBatchOffset < xcpBatchLen)
+    {
+      /* intermediate frame: no response yet */
+      xcpInfo.ctoLen = 0;
+      return;
+    }
+
+    /* batch complete */
+    xcpBatchActive = BLT_FALSE;
+    if (NvmWrite(xcpBatchAddr, xcpBatchLen, &xcpBatchBuffer[0]) == BLT_FALSE)
+    {
+      /* error occurred during programming */
+      XcpSetCtoError(XCP_ERR_GENERIC);
+      return;
+    }
+
+    /* set packet id to command response packet */
+    xcpInfo.ctoData[0] = XCP_PID_RES;
+
+    /* set packet length */
+    xcpInfo.ctoLen = 1;
+    return;
+  }
+
   /* program the data */
   if (NvmWrite((blt_addr)xcpInfo.mta, XCP_CTO_PACKET_LEN-1, &data[1]) == BLT_FALSE)
   {
@@ -1336,6 +1403,73 @@ static void XcpCmdProgramMax(blt_int8u *data)
   /* set packet length */
   xcpInfo.ctoLen = 1;
 } /*** end of XcpCmdProgramMax ***/
+
+
+/************************************************************************************//**
+** \brief     XCP command processor function which handles the rusEFI PROGRAM_BATCH
+**            extension: declares a deferred-ACK batch of len bytes at the current MTA.
+** \param     data Pointer to a byte buffer with the packet data (len in data[4..7], LE).
+** \return    none
+**
+****************************************************************************************/
+static void XcpCmdProgramBatch(blt_int8u *data)
+{
+#if (XCP_SEED_KEY_PROTECTION_EN == 1)
+  /* check if PGM resource is unlocked */
+  if ((xcpInfo.protection & XCP_RES_PGM) == XCP_RES_PGM)
+  {
+    /* resource is locked. use seed/key sequence to unlock */
+    XcpSetCtoError(XCP_ERR_ACCESS_LOCKED);
+    return;
+  }
+#endif
+
+  blt_int32u len = XcpGetOrderedLong(&data[4]);
+  if ((len == 0) || (len > (blt_int32u)XCP_BATCH_BUFFER_SIZE))
+  {
+    XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+    return;
+  }
+
+  xcpBatchAddr = (blt_addr)xcpInfo.mta;
+  xcpBatchLen = len;
+  xcpBatchOffset = 0;
+  xcpBatchActive = BLT_TRUE;
+
+  /* set packet id to command response packet */
+  xcpInfo.ctoData[0] = XCP_PID_RES;
+
+  /* set packet length */
+  xcpInfo.ctoLen = 1;
+} /*** end of XcpCmdProgramBatch ***/
+
+
+/************************************************************************************//**
+** \brief     XCP command processor function which handles the rusEFI SET_CAN_BAUDRATE
+**            extension: requests a CAN baudrate switch (data[1]: 0 = 500k, 1 = 1M).
+**            The response is sent at the current speed; the board transport applies
+**            the switch after the response left the wire.
+** \param     data Pointer to a byte buffer with the packet data.
+** \return    none
+**
+****************************************************************************************/
+static void XcpCmdSetCanBaudrate(blt_int8u *data)
+{
+  if (data[1] > 1)
+  {
+    XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+    return;
+  }
+
+  /* request the switch; applied by the main loop after the response is out */
+  XcpSetCanBaudrateHook(data[1]);
+
+  /* set packet id to command response packet */
+  xcpInfo.ctoData[0] = XCP_PID_RES;
+
+  /* set packet length */
+  xcpInfo.ctoLen = 1;
+} /*** end of XcpCmdSetCanBaudrate ***/
 
 
 /************************************************************************************//**
@@ -1426,6 +1560,9 @@ static void XcpCmdProgramClear(blt_int8u *data)
     XcpSetCtoError(XCP_ERR_GENERIC);
     return;
   }
+
+  /* an erase invalidates any pending batch */
+  xcpBatchActive = BLT_FALSE;
 
   /* set packet id to command response packet */
   xcpInfo.ctoData[0] = XCP_PID_RES;
