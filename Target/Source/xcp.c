@@ -77,6 +77,9 @@ static void XcpCmdGetStatus(blt_int8u *data);
 static void XcpCmdSynch(blt_int8u *data);
 static void XcpCmdGetId(blt_int8u *data);
 static void XcpCmdSetMta(blt_int8u *data);
+#if defined(BOOT_NVM_READ_HOOK_ENABLE) && (BOOT_NVM_READ_HOOK_ENABLE > 0)
+extern blt_bool NvmReadHook(blt_addr, blt_int32u, blt_int8u *);
+#endif
 static void XcpCmdUpload(blt_int8u *data);
 static void XcpCmdShortUpload(blt_int8u *data);
 static void XcpCmdBuildCheckSum(blt_int8u *data);
@@ -768,11 +771,25 @@ static void XcpCmdUpload(blt_int8u *data)
   else
   {
     /* copy the data from memory to the data packet */
+    #if defined(BOOT_NVM_READ_HOOK_ENABLE) && (BOOT_NVM_READ_HOOK_ENABLE > 0)
+    if (NvmReadHook((blt_addr)xcpInfo.mta, len, destPtr) == BLT_FALSE) {
+      XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+      return;
+    }
+#else
     CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+#endif
   }
   #else
   /* copy the data from memory to the data packet */
-  CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+  #if defined(BOOT_NVM_READ_HOOK_ENABLE) && (BOOT_NVM_READ_HOOK_ENABLE > 0)
+    if (NvmReadHook((blt_addr)xcpInfo.mta, len, destPtr) == BLT_FALSE) {
+      XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+      return;
+    }
+#else
+    CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+#endif
   #endif /* XCP_SEED_KEY_PROTECTION_EN == 1 */
 #else
   /* uploads are disabled, so return zero values for memory read operations */
@@ -836,11 +853,25 @@ static void XcpCmdShortUpload(blt_int8u *data)
   else
   {
     /* copy the data from memory to the data packet */
+    #if defined(BOOT_NVM_READ_HOOK_ENABLE) && (BOOT_NVM_READ_HOOK_ENABLE > 0)
+    if (NvmReadHook((blt_addr)xcpInfo.mta, len, destPtr) == BLT_FALSE) {
+      XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+      return;
+    }
+#else
     CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+#endif
   }
   #else
   /* copy the data from memory to the data packet */
-  CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+  #if defined(BOOT_NVM_READ_HOOK_ENABLE) && (BOOT_NVM_READ_HOOK_ENABLE > 0)
+    if (NvmReadHook((blt_addr)xcpInfo.mta, len, destPtr) == BLT_FALSE) {
+      XcpSetCtoError(XCP_ERR_OUT_OF_RANGE);
+      return;
+    }
+#else
+    CpuMemCopy((blt_addr)destPtr,(blt_addr)xcpInfo.mta, len);
+#endif
   #endif /* XCP_SEED_KEY_PROTECTION_EN == 1 */
 #else
   /* uploads are disabled, so return zero values for memory read operations */
